@@ -1,0 +1,59 @@
+name: ddy
+
+on:
+  schedule:
+    - cron: '0 */2 * * *'  # every 2 hours run
+  workflow_dispatch:        # manual trigger
+
+jobs:
+  download-m3u-files:
+    runs-on: ubuntu-latest
+    steps:
+      # 1. Download the repo
+      - uses: actions/checkout@v4
+
+      # 2. Setup the python
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+
+      # 3. Install the dependencies for python (requests)
+      - name: Install dependencies
+        run: python -m pip install --upgrade pip requests
+
+      # 4. Download the m3u8 files from huggingface and save them all
+      - name: Download and save m3u files
+        run: |
+          import requests
+          import os
+
+          def download_and_save(url, path):
+              try:
+                  response = requests.get(url)
+                  response.raise_for_status()
+                  os.makedirs(os.path.dirname(path), exist_ok=True)
+                  with open(path, 'w', encoding='utf-8') as f:
+                      f.write(response.text)
+                  print(f"{path} file created.")
+              except Exception as e:
+                  print(f"{path} couldn't download: {e}")
+
+          # Main list for HF playlist
+          download_and_save("${{ secrets.DADDYLIVE_URL }}", "dl/dl-all.m3u")
+          # Events list for HF playlist
+          download_and_save("${{ secrets.DADDYLIVE_EVENTS_URL }}", "dl/dl-events.m3u")
+        shell: python
+
+      # 6. If files changed, commit and push
+      - name: Commit and push if changed
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add dl/dl-all.m3u dl/dl-events.m3u
+          git diff --quiet && git diff --staged --quiet || (
+            git commit -m "♻️ Lists updated" -a
+            git push
+          )
+          
+      
